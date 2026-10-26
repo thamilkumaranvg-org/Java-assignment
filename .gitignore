@@ -1,0 +1,17 @@
+# Compiled Java files
+*.class
+
+# Temporary test files
+Test*.java
+
+# IDE settings
+.vscode/
+.idea/
+.DS_Store
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
