@@ -4,14 +4,14 @@
 # Temporary test files
 Test*.java
 
-# IDE settings
+# IDE files
 .vscode/
 .idea/
-.DS_Store
 
-# Environment files
+# Secrets
 .env
 .env.*
 
-# Logs
+# Logs and OS files
 *.log
+.DS_Store
