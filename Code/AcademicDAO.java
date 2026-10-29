@@ -116,69 +116,91 @@ public void updateAttendance(int enrollmentId, int classesHeld, int classesAtten
     }
 }
 
+
 public void displayAttendanceReport() {
 
     String sql =
-        "SELECT e.enrollment_id, e.roll_number, s.name, " +"e.course_code, c.title, e.classes_held, " + "e.classes_attended, " +
-        "CASE " + "WHEN e.classes_held = 0 THEN NULL " + "ELSE ROUND(100.0 * e.classes_attended / " +"e.classes_held, 2) " +
-        "END AS attendance_percentage " + "FROM enrollments e " + "JOIN students s ON e.roll_number = s.roll_number " +
+        "SELECT s.roll_number, s.name, s.department, " +
+        "c.course_code, c.title, e.semester, " +
+        "e.classes_held, e.classes_attended " +
+        "FROM enrollments e " +
+        "JOIN students s ON e.roll_number = s.roll_number " +
         "JOIN courses c ON e.course_code = c.course_code " +
-        "ORDER BY e.enrollment_id";
+        "ORDER BY s.department, s.roll_number, c.course_code";
+
+    String format = "%-12s %-20s %-8s %-12s %8s %10s %-35s%n";
 
     try (
         Connection connection = DBConnection.getConnection();
         PreparedStatement statement = connection.prepareStatement(sql);
-        ResultSet resultSet = statement.executeQuery()
+        ResultSet result = statement.executeQuery()
     ) {
-        while (resultSet.next()) {
+        System.out.println("\n==================== ATTENDANCE REPORT ====================");
 
-            System.out.println(
-                "Enrollment ID: " +
-                resultSet.getInt("enrollment_id")
-            );
-            System.out.println(
-                "Student: " + resultSet.getString("name")
-            );
-            System.out.println(
-                "Roll Number: " +
-                resultSet.getString("roll_number")
-            );
-            System.out.println(
-                "Course: " + resultSet.getString("title")
-            );
+        System.out.printf(
+            format,
+            "Roll No.", "Student Name", "Dept.", "Course",
+            "Held", "Attended", "Attendance / Status"
+        );
 
-            double attendance =
-                resultSet.getDouble("attendance_percentage");
+        System.out.println(
+            "---------------------------------------------------------------------------------------------------------------"
+        );
 
-            if (resultSet.wasNull()) {
-                System.out.println("Attendance: Not recorded");
-                System.out.println("Status: Pending");
+        boolean found = false;
+
+        while (result.next()) {
+            found = true;
+
+            int held = result.getInt("classes_held");
+            int attended = result.getInt("classes_attended");
+
+            String attendanceText;
+            if (held <= 0) {
+                attendanceText = "Not recorded | Pending";
             } else {
-                System.out.printf(
-                    "Attendance: %.2f%%%n", attendance
-                );
+                double percentage = attended * 100.0 / held;
+                String status;
 
-                if (attendance >= 75.0) {
-                    System.out.println("Status: Eligible");
-                } else if (attendance >= 65.0) {
-                    System.out.println(
-                        "Status: Conditional - Medical condonation required"
-                    );
+                if (percentage >= 75.0) {
+                    status = "Eligible";
+                } else if (percentage >= 65.0) {
+                    status = "Medical condonation";
                 } else {
-                    System.out.println(
-                        "Status: SA - Barred from ESE"
-                    );
+                    status = "SA";
                 }
+
+                attendanceText = String.format(
+                    "%.2f%% | %s", percentage, status
+                );
             }
 
-            System.out.println("----------------------------");
+            System.out.printf(
+                "%-12s %-20s %-8s %-12s %8d %10d %-35s%n",
+                result.getString("roll_number"),
+                result.getString("name"),
+                result.getString("department"),
+                result.getString("course_code"),
+                held,
+                attended,
+                attendanceText
+            );
         }
+
+        if (!found) {
+            System.out.println("No enrollment records found.");
+        }
+
+        System.out.println(
+            "==============================================================================================================="
+        );
 
     } catch (SQLException e) {
         System.out.println("Error generating attendance report.");
         e.printStackTrace();
     }
 }
+
 
 public void updateAssessmentMarks(int enrollmentId, Double cia1, Double cia2, Double assignments, Double quizzes, Double labEvaluations, Double eseMarks, boolean eseAbsent) {
 
@@ -561,6 +583,7 @@ private Double getNullableDouble(
     return ((Number) value).doubleValue();
 }
 
+
 public void displayStudentMarkSheet(
         String rollNumber,
         int semester) throws SQLException {
@@ -587,187 +610,292 @@ public void displayStudentMarkSheet(
         statement.setString(1, rollNumber);
         statement.setInt(2, semester);
 
-        try (ResultSet result = statement.executeQuery()) {
+        try (ResultSet rs = statement.executeQuery()) {
 
             boolean found = false;
-            System.out.println("\n======================================");
-            System.out.println("          STUDENT MARK SHEET");
-            System.out.println("======================================");
-            
+            int registeredCredits = 0;
+            int earnedCredits = 0;
+            double weightedGradePoints = 0.0;
+            boolean allPassed = true;
+            boolean pending = false;
 
+            System.out.println();
+            System.out.println(
+                "==========================================================================");
+            System.out.println(
+                "                 KONGU ENGINEERING COLLEGE (AUTONOMOUS)");
+            System.out.println(
+                "                         PERUNDURAI, ERODE");
+            System.out.println(
+                "                 GRADE SHEET - REGULATION 2024");
+            System.out.println(
+                "==========================================================================");
 
-            while (result.next()) {
-                     if (!found) {
+            while (rs.next()) {
+
+                if (!found) {
                     found = true;
 
-                    System.out.println("Name       : " + result.getString("name"));
-                    System.out.println("Roll Number: " + result.getString("roll_number"));
-                    System.out.println("Department : " + result.getString("department"));
-                    System.out.println("Semester   : " + result.getInt("semester"));
-                    System.out.println("--------------------------------------");
-                }
-                System.out.println("\nCourse: " +
-                    result.getString("title"));
-                System.out.println("Course Code: " +
-                    result.getString("course_code"));
-                System.out.println("Credits: " +
-                    result.getInt("credits"));
-                System.out.println("Course Type: " +
-                    result.getString("course_type"));
-
-                System.out.println("\n--- Assessment Marks ---");
-                System.out.println("CIA1: " +
-                    result.getObject("cia1"));
-                System.out.println("CIA2: " +
-                    result.getObject("cia2"));
-                System.out.println("Assignments: " +
-                    result.getObject("assignments"));
-                System.out.println("Quizzes: " +
-                    result.getObject("quizzes"));
-                System.out.println("Lab Evaluations: " +
-                    result.getObject("lab_evaluations"));
-
-                Object ese = result.getObject("ese_marks");
-
-                System.out.println("ESE: " +
-                    (result.getBoolean("ese_absent")
-                        ? "AB"
-                        : ese == null ? "Pending" : ese));
-
-                int held = result.getInt("classes_held");
-                int attended = result.getInt("classes_attended");
-
-                System.out.println("\n--- Attendance ---");
-
-                if (held == 0) {
-                    System.out.println("Attendance: Pending");
-                } else {
-                    double attendance =
-                        100.0 * attended / held;
+                    System.out.printf(
+                        "Roll Number : %-22s Student Name : %s%n",
+                        rs.getString("roll_number"),
+                        rs.getString("name"));
 
                     System.out.printf(
-                        "Attendance: %.2f%%%n", attendance);
+                        "Department  : %-22s Semester     : %d%n",
+                        rs.getString("department"),
+                        rs.getInt("semester"));
 
-                    if (attendance >= 75) {
-                        System.out.println("Status: Eligible");
-                    } else if (attendance >= 65) {
-                        System.out.println(
-                            result.getBoolean(
-                                "medical_condonation_approved")
-                                ? "Status: Conditional - Approved"
-                                : "Status: Conditional - Awaiting condonation");
-                    } else {
-                        System.out.println("Status: SA - Barred from ESE");
-                    }
+                    System.out.println(
+                        "Regulation  : R2024                Date         : "
+                        + java.time.LocalDate.now());
+
+                    System.out.println(
+                        "==========================================================================");
+
+                    System.out.printf(
+                        "%-10s %-29s %-11s %4s %7s%n",
+                        "Code", "Course Title", "Type",
+                        "Cr", "Attend%");
+
+                    System.out.println(
+                        "--------------------------------------------------------------------------");
                 }
 
-                System.out.println("\n--- Course Result ---");
+                String code = rs.getString("course_code");
+                String title = rs.getString("title");
+                String type = rs.getString("course_type");
+                int credits = rs.getInt("credits");
+                int held = rs.getInt("classes_held");
+                int attended = rs.getInt("classes_attended");
 
-                Object[] marks = {
-                    result.getObject("cia1"),
-                    result.getObject("cia2"),
-                    result.getObject("assignments"),
-                    result.getObject("quizzes"),
-                    result.getObject("lab_evaluations")
-                };
+                registeredCredits += credits;
 
-                boolean complete = true;
+                double attendance = held > 0
+                    ? 100.0 * attended / held
+                    : 0.0;
 
-                for (Object mark : marks) {
-                    if (mark == null) {
-                        complete = false;
-                        break;
-                    }
-                }
+                Object cia1Obj = rs.getObject("cia1");
+                Object cia2Obj = rs.getObject("cia2");
+                Object assignmentObj = rs.getObject("assignments");
+                Object quizObj = rs.getObject("quizzes");
+                Object labObj = rs.getObject("lab_evaluations");
+                Object eseObj = rs.getObject("ese_marks");
 
-                if (!complete || (ese == null &&
-                        !result.getBoolean("ese_absent"))) {
-                    System.out.println(
-                        "Result: Pending - assessment marks incomplete");
-                } else if (held == 0) {
-                    System.out.println(
-                        "Result: Pending - attendance not recorded");
+                boolean absent = rs.getBoolean("ese_absent");
+                boolean condonation =
+                    rs.getBoolean("medical_condonation_approved");
+
+                System.out.printf(
+                    "%-10s %-29.29s %-11s %4d %6.2f%%%n",
+                    code, title, type, credits,
+                    held > 0 ? attendance : 0.0);
+
+                System.out.printf(
+                    "  CIA1: %-7s CIA2: %-7s Assignment: %-7s%n",
+                    formatMark(cia1Obj),
+                    formatMark(cia2Obj),
+                    formatMark(assignmentObj));
+
+                System.out.printf(
+                    "  Quiz: %-7s Lab: %-7s ESE: %-9s%n",
+                    formatMark(quizObj),
+                    formatMark(labObj),
+                    absent ? "AB" : formatMark(eseObj));
+
+                System.out.println(
+                    "  ------------------------------------------------------------------------");
+
+                System.out.print("  Attendance Status: ");
+
+                if (held == 0) {
+                    System.out.println("Pending - attendance not recorded");
+                } else if (attendance >= 75.0) {
+                    System.out.println("Eligible for ESE");
+                } else if (attendance >= 65.0) {
+                    System.out.println(condonation
+                        ? "Conditional - Condonation Approved"
+                        : "Conditional - Condonation Required");
                 } else {
-                    double ciaScore = calculateCIAScore(
-                        ((Number) marks[0]).doubleValue(),
-                        ((Number) marks[1]).doubleValue(),
-                        ((Number) marks[2]).doubleValue(),
-                        ((Number) marks[3]).doubleValue(),
-                        ((Number) marks[4]).doubleValue()
-                    );
-
-                    double eseScore = ese == null
-                        ? 0.0
-                        : ((Number) ese).doubleValue();
-
-                    double total = calculateCourseResult(
-                        result.getString("course_type"),
-                        ciaScore,
-                        eseScore
-                    );
-                    double ciaWeight;
-                    double eseWeight;
-
-                    switch (result.getString("course_type").toUpperCase()) {
-                        case "THEORY":
-                        ciaWeight = 40  ;
-                        eseWeight = 60;
-                        break;
-                        case "PRACTICAL":
-                        ciaWeight = 60;
-                        eseWeight = 40;
-                        break;
-                        case "EMBEDDED":
-                        ciaWeight = 50;
-                        eseWeight = 50;
-                        break;
-                        default:
-                        throw new IllegalArgumentException("Invalid course type");
-                    }
-
-System.out.printf("CIA Contribution: %.2f%n",
-        ciaScore * ciaWeight / 100.0);
-System.out.printf("ESE Contribution: %.2f%n",
-        eseScore * eseWeight / 100.0);
-
-                    double attendance =
-                        100.0 * attended / held;
-
-                    String grade = calculateGrade(
-                        result.getString("course_type"),
-                        total,
-                        eseScore,
-                        result.getBoolean("ese_absent"),
-                        attendance,
-                        result.getBoolean(
-                            "medical_condonation_approved")
-                    );
-
-                    if (grade.equals("CONDITIONAL")) {
-                        System.out.println(
-                            "Result: Pending - medical condonation required");
-                    } else {
-                        System.out.printf(
-                            "CIA Score: %.2f%n", ciaScore);
-                        System.out.printf(
-                            "Weighted Total: %.2f%n", total);
-                        System.out.println("Grade: " + grade);
-                        System.out.println(
-                            "Grade Point: " + getGradePoint(grade));
-                    }
+                    System.out.println("SA - Shortage of Attendance");
                 }
 
-                System.out.println("======================================");
+                boolean marksComplete =
+                    cia1Obj != null &&
+                    cia2Obj != null &&
+                    assignmentObj != null &&
+                    quizObj != null &&
+                    labObj != null &&
+                    (eseObj != null || absent);
+
+                if (!marksComplete || held == 0) {
+                    System.out.println(
+                        "  Course Result: PENDING - incomplete data");
+                    pending = true;
+                    allPassed = false;
+                    System.out.println();
+                    continue;
+                }
+
+                double ciaScore = calculateCIAScore(
+                    ((Number) cia1Obj).doubleValue(),
+                    ((Number) cia2Obj).doubleValue(),
+                    ((Number) assignmentObj).doubleValue(),
+                    ((Number) quizObj).doubleValue(),
+                    ((Number) labObj).doubleValue());
+
+                double eseScore = eseObj == null
+                    ? 0.0
+                    : ((Number) eseObj).doubleValue();
+
+                double total = calculateCourseResult(
+                    type, ciaScore, eseScore);
+
+                double ciaWeight;
+                double eseWeight;
+
+                switch (type.toUpperCase()) {
+                    case "THEORY":
+                        ciaWeight = 40.0;
+                        eseWeight = 60.0;
+                        break;
+                    case "PRACTICAL":
+                        ciaWeight = 60.0;
+                        eseWeight = 40.0;
+                        break;
+                    case "EMBEDDED":
+                        ciaWeight = 50.0;
+                        eseWeight = 50.0;
+                        break;
+                    default:
+                        throw new IllegalArgumentException(
+                            "Invalid course type: " + type);
+                }
+
+                double ciaContribution =
+                    ciaScore * ciaWeight / 100.0;
+
+                double eseContribution =
+                    eseScore * eseWeight / 100.0;
+
+                String grade = calculateGrade(
+                    type,
+                    total,
+                    eseScore,
+                    absent,
+                    attendance,
+                    condonation);
+
+                int gradePoint = getGradePoint(grade);
+
+                System.out.printf(
+                    "  CIA Average: %.2f | Scaled CIA: %.2f%n",
+                    ciaScore, ciaContribution);
+
+                System.out.printf(
+                    "  ESE Marks: %.2f | Scaled ESE: %.2f%n",
+                    eseScore, eseContribution);
+
+                System.out.printf(
+                    "  Weighted Total: %.2f | Grade: %s | Grade Point: %d%n",
+                    total, grade, gradePoint);
+
+                if (grade.equals("CONDITIONAL")) {
+                    System.out.println(
+                        "  Result: CONDITIONAL - Medical condonation required");
+                    pending = true;
+                    allPassed = false;
+                } else if (grade.equals("RA") ||
+                           grade.equals("SA") ||
+                           grade.equals("AB")) {
+                    System.out.println("  Result: NOT PASSED");
+                    allPassed = false;
+                } else if (grade.equals("PENDING")) {
+                    System.out.println("  Result: PENDING");
+                    pending = true;
+                    allPassed = false;
+                } else {
+                    System.out.println("  Result: PASS");
+                    earnedCredits += credits;
+                    weightedGradePoints += credits * gradePoint;
+                }
+
+                System.out.println(
+                    "--------------------------------------------------------------------------");
             }
 
             if (!found) {
                 System.out.println(
                     "No enrolled courses found for this student and semester.");
+                return;
             }
+
+            System.out.println();
+            System.out.println(
+                "======================= SEMESTER SUMMARY =======================");
+
+            System.out.printf(
+                "Registered Credits    : %d%n", registeredCredits);
+
+            System.out.printf(
+                "Earned Credits        : %d%n", earnedCredits);
+
+            System.out.printf(
+                "Weighted Grade Points : %.2f%n", weightedGradePoints);
+
+            // Use the existing SGPA calculation for the semester.
+            double sgpa = calculateSGPA(rollNumber, semester);
+
+            System.out.printf(
+                "Semester SGPA         : %.2f%n", sgpa);
+
+            System.out.printf(
+                "Equivalent Percentage : %.2f%%%n", sgpa * 10.0);
+
+            if (pending) {
+                System.out.println(
+                    "Semester Outcome      : PENDING - Review required");
+            } else if (allPassed) {
+                System.out.println(
+                    "Semester Outcome      : PASS - All courses cleared");
+            } else {
+                System.out.println(
+                    "Semester Outcome      : NOT CLEARED");
+            }
+
+            System.out.println(
+                "==========================================================================");
+            System.out.println("                       GRADING DETAILS");
+            System.out.println(
+                "--------------------------------------------------------------------------");
+            System.out.println("Grade     Marks Range     Grade Point");
+            System.out.println("O         91 - 100         10");
+            System.out.println("A+        81 - 90           9");
+            System.out.println("A         71 - 80           8");
+            System.out.println("B+        61 - 70           7");
+            System.out.println("B         50 - 60           6");
+            System.out.println("RA        Result below pass requirements");
+            System.out.println("SA        Shortage of attendance");
+            System.out.println("AB        Absent for ESE");
+            System.out.println(
+                "--------------------------------------------------------------------------");
+            System.out.println("CONFIGURED COURSE WEIGHTAGES");
+            System.out.println("THEORY    : CIA 40% | ESE 60% | ESE minimum 27/60");
+            System.out.println("PRACTICAL : CIA 60% | ESE 40% | ESE minimum 20/40");
+            System.out.println("EMBEDDED  : CIA 50% | ESE 50% | ESE minimum 22.5/50");
+            System.out.println("Overall pass minimum: 50 marks");
+            System.out.println(
+                "==========================================================================");
         }
     }
 }
+private String formatMark(Object mark) {
+    if (mark == null) {
+        return "Pending";
+    }
 
+    return String.format("%.2f", ((Number) mark).doubleValue());
+}
 public void displayAssessmentMarksByRollNumber(String rollNumber) {
 
     String sql =
@@ -836,6 +964,264 @@ public void displayAssessmentMarksByRollNumber(String rollNumber) {
         System.out.println("Error retrieving assessment marks.");
         e.printStackTrace();
     }
+}
+
+public int findEnrollmentId(String rollNumber, String courseCode, int semester) {
+    String sql =
+            "SELECT enrollment_id FROM enrollments " +
+            "WHERE roll_number = ? AND course_code = ? AND semester = ?";
+
+    try (
+        Connection connection = DBConnection.getConnection();
+        PreparedStatement statement = connection.prepareStatement(sql)
+    ) {
+        statement.setString(1, rollNumber);
+        statement.setString(2, courseCode);
+        statement.setInt(3, semester);
+
+        try (ResultSet result = statement.executeQuery()) {
+            if (result.next()) {
+                return result.getInt("enrollment_id");
+            }
+        }
+
+    } catch (SQLException e) {
+        System.out.println("Error finding student enrollment.");
+        e.printStackTrace();
+    }
+
+    return -1;
+}
+
+
+
+public void displayDepartmentPerformanceReport() throws SQLException {
+
+    String sql =
+        "SELECT s.department, s.roll_number, s.name, " +
+        "e.enrollment_id, e.semester, e.classes_held, " +
+        "e.classes_attended, e.medical_condonation_approved, " +
+        "c.course_code, c.title, c.course_type, c.credits, " +
+        "am.cia1, am.cia2, am.assignments, am.quizzes, " +
+        "am.lab_evaluations, am.ese_marks, am.ese_absent " +
+        "FROM enrollments e " +
+        "JOIN students s ON e.roll_number = s.roll_number " +
+        "JOIN courses c ON e.course_code = c.course_code " +
+        "LEFT JOIN assessment_marks am " +
+        "ON e.enrollment_id = am.enrollment_id " +
+        "ORDER BY s.department, s.roll_number, c.course_code";
+
+    class DepartmentStats {
+        int enrollments = 0;
+        int passed = 0;
+        int failed = 0;
+        int pending = 0;
+        int registeredCredits = 0;
+        int earnedCredits = 0;
+    }
+
+    java.util.Map<String, DepartmentStats> departments =
+        new java.util.TreeMap<>();
+
+    try (Connection connection = DBConnection.getConnection();
+         PreparedStatement statement =
+             connection.prepareStatement(sql);
+         ResultSet rs = statement.executeQuery()) {
+
+        while (rs.next()) {
+
+            String department = rs.getString("department");
+
+            DepartmentStats stats = departments.computeIfAbsent(
+                department, key -> new DepartmentStats());
+
+            stats.enrollments++;
+
+            int credits = rs.getInt("credits");
+            stats.registeredCredits += credits;
+
+            int held = rs.getInt("classes_held");
+            int attended = rs.getInt("classes_attended");
+
+            double attendance = held > 0
+                ? 100.0 * attended / held
+                : 0.0;
+
+            Object cia1 = rs.getObject("cia1");
+            Object cia2 = rs.getObject("cia2");
+            Object assignments = rs.getObject("assignments");
+            Object quizzes = rs.getObject("quizzes");
+            Object lab = rs.getObject("lab_evaluations");
+            Object ese = rs.getObject("ese_marks");
+
+            boolean absent = rs.getBoolean("ese_absent");
+
+            boolean complete =
+                cia1 != null &&
+                cia2 != null &&
+                assignments != null &&
+                quizzes != null &&
+                lab != null &&
+                (ese != null || absent);
+
+            if (!complete || held == 0) {
+                stats.pending++;
+                continue;
+            }
+
+            double ciaScore = calculateCIAScore(
+                ((Number) cia1).doubleValue(),
+                ((Number) cia2).doubleValue(),
+                ((Number) assignments).doubleValue(),
+                ((Number) quizzes).doubleValue(),
+                ((Number) lab).doubleValue());
+
+            double eseScore = ese == null
+                ? 0.0
+                : ((Number) ese).doubleValue();
+
+            double total = calculateCourseResult(
+                rs.getString("course_type"),
+                ciaScore,
+                eseScore);
+
+            String grade = calculateGrade(
+                rs.getString("course_type"),
+                total,
+                eseScore,
+                absent,
+                attendance,
+                rs.getBoolean("medical_condonation_approved"));
+
+            if (grade.equals("CONDITIONAL") ||
+                grade.equals("PENDING")) {
+                stats.pending++;
+            } else if (grade.equals("RA") ||
+                       grade.equals("SA") ||
+                       grade.equals("AB")) {
+                stats.failed++;
+            } else {
+                stats.passed++;
+                stats.earnedCredits += credits;
+            }
+        }
+    }
+
+    System.out.println();
+    System.out.println(
+        "==========================================================================");
+    System.out.println(
+        "                  KONGU ENGINEERING COLLEGE (AUTONOMOUS)");
+    System.out.println(
+        "                          PERUNDURAI, ERODE");
+    System.out.println(
+        "             DEPARTMENT-WISE CLASS PERFORMANCE REPORT");
+    System.out.println(
+        "                         REGULATION 2024");
+    System.out.println(
+        "==========================================================================");
+
+    if (departments.isEmpty()) {
+        System.out.println("No enrollment records found.");
+        return;
+    }
+
+    System.out.printf(
+        "%-12s %8s %8s %8s %8s %10s %10s%n",
+        "Department", "Enrolled", "Passed", "Failed",
+        "Pending", "Pass %", "Earned Cr");
+
+    System.out.println(
+        "--------------------------------------------------------------------------");
+
+    int totalEnrollments = 0;
+    int totalPassed = 0;
+    int totalFailed = 0;
+    int totalPending = 0;
+    int totalRegisteredCredits = 0;
+    int totalEarnedCredits = 0;
+
+    for (java.util.Map.Entry<String, DepartmentStats> entry
+            : departments.entrySet()) {
+
+        String department = entry.getKey();
+        DepartmentStats s = entry.getValue();
+
+        int finalized = s.passed + s.failed;
+
+        double passPercentage = finalized > 0
+            ? 100.0 * s.passed / finalized
+            : 0.0;
+
+        System.out.printf(
+            "%-12s %8d %8d %8d %8d %9.2f%% %10d%n",
+            department,
+            s.enrollments,
+            s.passed,
+            s.failed,
+            s.pending,
+            passPercentage,
+            s.earnedCredits);
+
+        totalEnrollments += s.enrollments;
+        totalPassed += s.passed;
+        totalFailed += s.failed;
+        totalPending += s.pending;
+        totalRegisteredCredits += s.registeredCredits;
+        totalEarnedCredits += s.earnedCredits;
+    }
+
+    int finalizedTotal = totalPassed + totalFailed;
+
+    double overallPassPercentage = finalizedTotal > 0
+        ? 100.0 * totalPassed / finalizedTotal
+        : 0.0;
+
+    System.out.println(
+        "--------------------------------------------------------------------------");
+
+    System.out.printf(
+        "%-12s %8d %8d %8d %8d %9.2f%% %10d%n",
+        "OVERALL",
+        totalEnrollments,
+        totalPassed,
+        totalFailed,
+        totalPending,
+        overallPassPercentage,
+        totalEarnedCredits);
+
+    System.out.println(
+        "==========================================================================");
+
+    System.out.printf(
+        "Total Registered Credits : %d%n", totalRegisteredCredits);
+
+    System.out.printf(
+        "Total Earned Credits     : %d%n", totalEarnedCredits);
+
+    System.out.printf(
+        "Finalized Results        : %d%n", finalizedTotal);
+
+    System.out.printf(
+        "Pending Results          : %d%n", totalPending);
+
+    System.out.printf(
+        "Overall Pass Percentage  : %.2f%%%n",
+        overallPassPercentage);
+
+    System.out.println(
+        "Note: Pass percentage is based only on finalized results.");
+
+    System.out.println(
+        "==========================================================================");
+    System.out.println("RESULT CLASSIFICATION");
+    System.out.println("PASS : Student passed the course requirements");
+    System.out.println("RA   : Failed the configured examination/pass requirements");
+    System.out.println("SA   : Shortage of attendance");
+    System.out.println("AB   : Absent for the ESE");
+    System.out.println("PENDING : Marks, attendance or condonation requires review");
+    System.out.println(
+        "==========================================================================");
 }
 
 }
